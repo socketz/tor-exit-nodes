@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '0 * * * *'
       timezone: "Europe/Madrid"
+  workflow_dispatch:
 
 env:
   DATA_CHANGED: false
