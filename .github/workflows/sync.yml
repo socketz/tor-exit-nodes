@@ -3,15 +3,12 @@ name: Sync
 on:
   schedule:
     - cron: '0 * * * *'
-      timezone: "Europe/Madrid"
+      timezone: "UTC"
   workflow_dispatch:
-
-env:
-  DATA_CHANGED: false
 
 concurrency:
   group: data-sync
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -19,39 +16,53 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Fetch and generate data
         run: python3 src/onionoo_fetch.py
       - name: Sanity check generated data
         run: |
-          test -s tor_relays.csv || { echo "tor_relays.csv is empty; aborting"; exit 1; }
-          test "$(wc -l < tor_relays.csv)" -gt 1 || { echo "tor_relays.csv has no data rows; aborting"; exit 1; }
+          test -s tor_relays.csv || { echo "::error::tor_relays.csv is empty; aborting"; exit 1; }
+          ROWS=$(($(wc -l < tor_relays.csv) - 1))
+          test "$ROWS" -ge 1000 || { echo "::error::only $ROWS relays (min 1000); aborting"; exit 1; }
       - name: Commit and push if changed
+        id: push
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git add tor_relays.csv tor_relays_ips.txt tor_relays_ips_ipv4.txt tor_relays_ips_ipv6.txt
           if ! git diff --cached --quiet; then
             git -c user.name="github-actions[bot]" \
                 -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-                commit -m "chore: sync tor relay data [skip ci]"
+                commit -m "chore: sync tor relay data"
             pushed=false
             for attempt in 1 2 3; do
               if git push; then
                 pushed=true
                 break
               fi
-              git pull --rebase
+              echo "Push failed, attempt $attempt. Rebasing..."
+              if ! git pull --rebase --autostash origin master; then
+                echo "::error::Rebase failed; aborting"
+                exit 1
+              fi
             done
             if [ "$pushed" != "true" ]; then
-              echo "::error:: failed to push after 3 attempts"
+              echo "::error::failed to push after 3 attempts"
               exit 1
             fi
-            echo "DATA_CHANGED=true" >> "$GITHUB_ENV"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish release (rolling tag "data")
         env:
           GH_TOKEN: ${{ github.token }}
-        if: env.DATA_CHANGED == 'true'
+        if: steps.push.outputs.changed == 'true'
         run: |
           if gh release view data >/dev/null 2>&1; then
             gh release edit data \
