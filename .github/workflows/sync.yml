@@ -3,7 +3,7 @@ name: Sync
 on:
   schedule:
     - cron: '0 * * * *'
-  workflow_dispatch:
+      timezone: "Europe/Madrid"
 
 env:
   DATA_CHANGED: false
@@ -48,6 +48,8 @@ jobs:
             echo "DATA_CHANGED=true" >> "$GITHUB_ENV"
           fi
       - name: Publish release (rolling tag "data")
+        env:
+          GH_TOKEN: ${{ github.token }}
         if: env.DATA_CHANGED == 'true'
         run: |
           if gh release view data >/dev/null 2>&1; then
