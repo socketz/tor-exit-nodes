@@ -21,7 +21,7 @@ RETRIES = 3
 TIMEOUT = 60
 MIN_RELAYS = 1000
 CHURN_TOLERANCE = 100
-USER_AGENT = "tor-exit-nodes/1.0"
+USER_AGENT = "tor-exit-nodes/1.0 +(https://github.com/socketz/tor-exit-nodes)"
 
 CSV_NAME = "tor_relays.csv"
 IPS_ALL = "tor_relays_ips.txt"
